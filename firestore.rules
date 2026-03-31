@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User Profiles
+    match /users/{userId} {
+      // Anyone can read a user profile (for display names)
+      allow read: if request.auth != null;
+      // Users can only create/update their own profile
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false; // Only admin can delete visually
+    }
+
+    // Properties
+    match /properties/{propertyId} {
+      // Anyone logged in can read properties
+      allow read: if true;
+      // Only property owners can create their own listings
+      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner';
+      // Only the specific owner or admin can update/delete
+      allow update, delete: if request.auth != null && (
+        resource.data.ownerId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+    }
+
+    // Bookings
+    match /bookings/{bookingId} {
+      // Tenant or owner involved can read
+      allow read: if request.auth != null && (
+        resource.data.tenantId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
+      // Tenants can create bookings
+      allow create: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'tenant';
+      // Involved parties can update (owner approves, tenant cancels)
+      allow update: if request.auth != null && (
+        resource.data.tenantId == request.auth.uid ||
+        resource.data.ownerId == request.auth.uid
+      );
+      allow delete: if false;
+    }
+  }
+}
